@@ -797,7 +797,7 @@ function initDock(){ initNavBack(); const f=$('#fabImg'); if(f&&!f.src) f.src=AU
 let navDepth=0;
 function hist(st,replace){ try{ const h='#'+(st.v==='app'?(st.page+(st.page==='clans'&&st.cv==='city'?'-leaderboard':'')):st.v==='ob'?'welcome-'+((st.ob||0)+1):st.v); st.d=replace?navDepth:++navDepth; history[replace?'replaceState':'pushState'](st,'',h); }catch(e){} updBack(); }
 function pushNav(){ hist({v:'app',page:ui.page,cv:ui.clanView}); }
-function updBack(){ const b=$('#navBack'); if(b) b.hidden=(ui.page==='home')||(ui.page==='clans'&&ui.clanView==='city'); }
+function updBack(){ const b=$('#navBack'); if(b) b.hidden=(ui.page==='home')||(ui.page==='clans'); }
 function goBack(){ ui.trail=ui.trail||[]; let t=null; while(ui.trail.length){ const x=ui.trail.pop(); if(x&&x!==ui.page){ t=x; break; } } if(ui.page==='chats'&&ui.chatWith&&matchMedia('(max-width:760px)').matches){ ui.chatWith=null; pageChats(); return; } go(t||'home',{noTrail:true}); }
 window.addEventListener('popstate',e=>{ const st=e.state; if(!st) return; navDepth=st.d||0;
   document.querySelectorAll('.modal-bg').forEach(x=>x.remove()); if($('#dock')&&!$('#dock').hidden){ closeDock(); }
