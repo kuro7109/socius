@@ -839,9 +839,9 @@ const FEEL_SAY={
   excited:["Ooh, tell me everything! Excitement is even better with company.",'Share it with Kabir'],
   content:["Calm days are lovely. A perfect time for an easy hello to an old friend.",'Say hi to Kabir'],
   curious:["Curious is a great feeling. Your clan has a meetup Thursday, maybe someone there is curious too?",null],
-  sad:["Thank you for telling me. Sad is heavy to carry alone. Kabir felt this after his move too. Want to say hi?",'Say hi to Kabir'],
-  worried:["That sounds like a lot. Worries get lighter when someone else holds one end. Kabir has been there.",'Talk to Kabir'],
-  angry:["That's okay. Angry usually means something mattered to you. Want to talk it through with someone who gets it?",'Talk to Kabir'],
+  sad:["Thank you for telling me. It's okay to feel sad, you don't have to fix it right now. I'm here if you want to talk about it.",'Talk to Milo'],
+  worried:["That sounds like a lot on your mind. It's okay to feel this way. Want to tell me what's worrying you?",'Talk to Milo'],
+  angry:["That's okay. Angry usually means something mattered to you. Want to let it out? I'm listening, no judgement.",'Talk to Milo'],
   sleepy_face:["Rest counts too. Use a freeze today, no guilt. I'll be right here tomorrow.",null]};
 
 function maybeFeel(){ if(ui.feelAsked || ui.page!=='home') return; if(document.querySelector('.modal-bg')){ setTimeout(maybeFeel,800); return; } ui.feelAsked=true; openFeel(); }
@@ -855,7 +855,7 @@ function openFeel(){
       $('#fSkip',m).onclick=c;
       m.querySelectorAll('[data-mood]').forEach(b=>b.onclick=()=>{ const k=b.dataset.mood; ui.mood=k; S.lastMood=k; save(); m.querySelectorAll('[data-mood]').forEach(x=>x.setAttribute('aria-pressed',x===b));
         $('#fOut',m).innerHTML=reply(k); $('#fSkip',m).hidden=true;
-        const r=$('#fReach',m); if(r) r.onclick=()=>{ c(); reachOut('Kabir Sethi'); };
+        const r=$('#fReach',m); if(r) r.onclick=()=>{ c(); if(FEEL_SAY[k][1]==='Talk to Milo'){ const mm=miloMem(), mood={sad:'sad',worried:'anxious',angry:'angry'}[k]; mm.mood=mood; mm.moodAt=mm.turns; mm.awaiting='story'; const L=miloLog(); L.push({me:false,t:({sad:`I saw you're feeling sad today, ${first(S.name)}. I'm right here. Do you want to tell me what's been going on?`,worried:`I saw you're feeling worried, ${first(S.name)}. Want to tell me what's on your mind? No rush.`,angry:`I saw you're feeling angry. That's okay. What happened?`})[k],at:Date.now()}); S.miloLog=L.slice(-40); save(); openMilo(); } else reachOut('Kabir Sethi'); };
         $('#fDone',m).onclick=()=>{ c(); toast('Milo is here whenever you need.'); };
         $('#fOut',m).scrollIntoView({block:'nearest',behavior:'smooth'}); });
     },'mc feelm');
