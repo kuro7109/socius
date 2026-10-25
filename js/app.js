@@ -339,7 +339,7 @@ function enterApp(returning,push){
   }
 }
 
-function go(p,opts={}){ const prev=ui.page; if(p==='chats'&&prev&&prev!=='chats') ui.prevPage=prev; if(!opts.fromPop&&!opts.noTrail&&prev&&prev!==p){ ui.trail=ui.trail||[]; ui.trail.push(prev); ui.trail=ui.trail.slice(-30); } ui.page=p; if(!opts.fromPop) pushNav();
+function go(p,opts={}){ const prev=ui.page; if(p==='clans'&&!opts.fromPop&&!opts.keepView) ui.clanView='mine'; if(p==='chats'&&prev&&prev!=='chats') ui.prevPage=prev; if(!opts.fromPop&&!opts.noTrail&&prev&&prev!==p){ ui.trail=ui.trail||[]; ui.trail.push(prev); ui.trail=ui.trail.slice(-30); } ui.page=p; if(!opts.fromPop) pushNav();
   document.querySelectorAll('#nav button').forEach(b=>b.setAttribute('aria-current', b.dataset.page===p?'page':'false'));
   const mc=$('#meCard'); if(mc){ mc.classList.toggle('on',p==='profile'); mc.setAttribute('aria-current',p==='profile'?'page':'false'); }
   document.body.classList.toggle('chatmode',p==='chats');
@@ -797,7 +797,7 @@ function initDock(){ initNavBack(); const f=$('#fabImg'); if(f&&!f.src) f.src=AU
 let navDepth=0;
 function hist(st,replace){ try{ const h='#'+(st.v==='app'?(st.page+(st.page==='clans'&&st.cv==='city'?'-leaderboard':'')):st.v==='ob'?'welcome-'+((st.ob||0)+1):st.v); st.d=replace?navDepth:++navDepth; history[replace?'replaceState':'pushState'](st,'',h); }catch(e){} updBack(); }
 function pushNav(){ hist({v:'app',page:ui.page,cv:ui.clanView}); }
-function updBack(){ const b=$('#navBack'); if(b) b.hidden=(ui.page==='home'); }
+function updBack(){ const b=$('#navBack'); if(b) b.hidden=(ui.page==='home')||(ui.page==='clans'&&ui.clanView==='city'); }
 function goBack(){ ui.trail=ui.trail||[]; let t=null; while(ui.trail.length){ const x=ui.trail.pop(); if(x&&x!==ui.page){ t=x; break; } } if(ui.page==='chats'&&ui.chatWith&&matchMedia('(max-width:760px)').matches){ ui.chatWith=null; pageChats(); return; } go(t||'home',{noTrail:true}); }
 window.addEventListener('popstate',e=>{ const st=e.state; if(!st) return; navDepth=st.d||0;
   document.querySelectorAll('.modal-bg').forEach(x=>x.remove()); if($('#dock')&&!$('#dock').hidden){ closeDock(); }
@@ -1128,6 +1128,7 @@ function pageClans(){
   const custom=S.clan&&S.clan.custom;
   const menu=`<div class="dropdown"><button class="btn gold sm" id="lbBtn" aria-haspopup="true" aria-expanded="false">Leaderboards <span aria-hidden="true">▾</span></button>
     <div class="menu" id="lbMenu" hidden role="menu"><button role="menuitem" data-cv="city" aria-current="${ui.clanView==='city'}">City clans leaderboard</button><button role="menuitem" data-cv="mine" aria-current="${ui.clanView!=='city'}">My clan: ${MY_CLAN}</button><button role="menuitem" id="switchClan">Switch clan</button></div></div>`;
+  updBack();
   if(ui.clanView==='city') return clansCity(menu);
   const q=(ui.memberQ||'').toLowerCase();
   const mem=(custom?[[S.name,'You',0,'Founder']]:MEMBERS).filter(m=>m[0].toLowerCase().includes(q));
@@ -1174,7 +1175,7 @@ function clansCity(menu){
     <div class="card" style="padding:10px">${rankRows(list,10)}</div>
     <p class="small muted">Your clan is #${me+1}. Showing the top 10 of 54.</p>`;
   wireClanMenu();
-  $('#backClan').onclick=()=>{ if(history.state&&history.state.cv==='city'&&history.length>1){ history.back(); } else setClanView('mine'); };
+  $('#backClan').onclick=()=>setClanView('mine');
   $('#page').querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{ ui.board=b.dataset.b; pageClans(); });
 }
 
