@@ -38,4 +38,9 @@ async function clearHistory(device) {
   } catch { return false; }
 }
 
-module.exports = { enabled, loadHistory, saveMessages, clearHistory, DEVICE_RE };
+async function ping() {
+  if (!enabled) return false;
+  try { const r = await fetch(`${URL_}/rest/v1/milo_messages?select=id&limit=1`, { headers: headers() }); return r.ok; } catch { return false; }
+}
+
+module.exports = { ping, enabled, loadHistory, saveMessages, clearHistory, DEVICE_RE };

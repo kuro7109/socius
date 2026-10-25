@@ -420,14 +420,14 @@ function miloPane(narrow){ const tips=MILO_TIPS[ui.prevPage]||MILO_TIPS.home; co
     </div>
     <div class="chips mi-chips">${['Chat with Kabir','Open my report','Go to clans','How am I feeling?'].map(c=>`<button class="chip" data-cmd="${c}">${c}</button>`).join('')}</div>
     <form class="composer" id="miF"><button type="button" class="mic" id="miMic" aria-label="Speak to Milo" aria-pressed="false">${ICON_MIC}</button><input id="miIn" autocomplete="off" placeholder="Ask Milo or say a command" aria-label="Ask Milo"><button type="submit" class="csend" aria-label="Send">${ICON_SEND}</button></form>
-    <p class="small muted cnote">${AI_LABEL[aiProvider()]}</p></section>`; }
+    <p class="small muted cnote ${AI_FAIL&&aiProvider()==='server'?'aifail':''}">${AI_FAIL&&aiProvider()==='server'?'Replying offline: '+esc(AI_FAIL):AI_LABEL[aiProvider()]}</p></section>`; }
 function wireMilo(){ const pg=$('#page'), box=$('#miMsgs'); box.scrollTop=box.scrollHeight;
   const push=(me,t)=>{ const L=miloLog(); L.push({me,t,at:Date.now()}); S.miloLog=L.slice(-40); save(); };
   const run=async t=>{ t=(t||'').trim(); if(!t) return; const r=runCommand(t); if(!r) return; push(true,t);
     const out=$('#miOut'); out.insertAdjacentHTML('beforebegin',`<div class="bub me">${esc(t)}</div>`);
     out.innerHTML=`<div class="bub" id="aiB"><span class="typing"><span></span><span></span><span></span></span></div>`; box.scrollTop=1e9;
     try{ const full=await aiAsk(t,txt=>{ const b=$('#aiB'); if(b) b.textContent=splitAction(txt).text||'…'; });
-      const {text,act}=splitAction(full); push(false,text); if(!CRISIS_RE.test(t)) memSync(t,full); const b=$('#aiB'); if(b){ b.removeAttribute('id'); b.textContent=text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; if(act){ const btn=document.createElement('button'); btn.className='lgo sm'; btn.style.cssText='margin-top:8px;display:block'; btn.textContent=actLabel(act)+' →'; btn.onclick=()=>{ const a=act.toLowerCase().startsWith('chat:')?'chat:'+act.slice(5).trim():act.toLowerCase(); doTip(a); }; b.appendChild(btn); } } }
+      const {text,act}=splitAction(full); push(false,text); const nt=document.querySelector('.milo-pane .cnote'); if(nt){ const f=AI_FAIL&&aiProvider()==='server'; nt.textContent=f?'Replying offline: '+AI_FAIL:AI_LABEL[aiProvider()]; nt.classList.toggle('aifail',!!f); } if(!CRISIS_RE.test(t)) memSync(t,full); const b=$('#aiB'); if(b){ b.removeAttribute('id'); b.textContent=text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; if(act){ const btn=document.createElement('button'); btn.className='lgo sm'; btn.style.cssText='margin-top:8px;display:block'; btn.textContent=actLabel(act)+' →'; btn.onclick=()=>{ const a=act.toLowerCase().startsWith('chat:')?'chat:'+act.slice(5).trim():act.toLowerCase(); doTip(a); }; b.appendChild(btn); } } }
     catch(e){ const b=$('#aiB'); if(b){ b.removeAttribute('id'); const lr=(e&&e.code==='bad_key')?{text:aiErrCopy('bad_key')}:splitAction(localReply(t)); b.textContent=lr.text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; push(false,lr.text); } }
     box.scrollTop=1e9; };
   pg.querySelectorAll('[data-tip]').forEach(b=>b.onclick=()=>doTip(b.dataset.tip));
@@ -633,6 +633,18 @@ function nudgeFor(mem,d){ if(!(NEGATIVE.includes(mem.mood||'') && mem.moodAt!=nu
   return `\n\nOnly if you feel like it: ${first(f[0])} ${f[1].charAt(0).toLowerCase()+f[1].slice(1)}, so they might really get what this feels like. No rush at all.\nACTION: chat:${f[0]}`; }
 function localReply(text){ const mem=miloMem(); const q=text.toLowerCase().trim(); mem.turns++; if(mem.offer && mem.turns-(mem.offerAt||0)>1) mem.offer=null;
   if(CRISIS_RE.test(q)){ mem.awaiting=null; return crisisReply(); }
+  mem.facts=mem.facts||{};
+  const cap=w=>w.charAt(0).toUpperCase()+w.slice(1);
+  let fm=text.match(/\bmy ((?:best |close |old )?[a-z]+)(?:'s|s)? name is ([a-z][a-z'-]*)/i)||text.match(/\bmy ((?:best |close |old )?[a-z]+) is called ([a-z][a-z'-]*)/i);
+  let fm2=!fm&&text.match(/\b([A-Z][a-z'-]+) is my ((?:best |close |old )?[a-z]+)\b/);
+  if(fm2) fm=[0,fm2[2],fm2[1]];
+  if(fm && !/^(life|mind|day|week|job|work|head|heart)$/i.test(fm[1])){ const who=fm[1].toLowerCase(), nm=cap(fm[2]); mem.facts[who]=nm; mem.awaiting='story';
+    return pickFresh([`${nm}, got it. I'll remember that. How do you and ${nm} know each other?`,`Nice, ${nm}! I'll remember. What's ${nm} like?`],mem); }
+  const nmQ=text.match(/\b(?:what(?:'s| is| was)|do you (?:know|remember)|tell me) my ((?:best |close |old )?[a-z]+?)(?:'s|s)? name\b/i)||text.match(/\bwho(?:'s| is) my ((?:best |close |old )?[a-z]+)\b/i);
+  if(/\bwhat(?:'s| is) my name\b/i.test(text)) return `You're ${first(S.name||'friend')}! 🐾`;
+  if(nmQ){ const who=nmQ[1].toLowerCase(); const hit=mem.facts[who]||Object.entries(mem.facts).find(([k])=>k.includes(who)||who.includes(k))?.[1];
+    return hit?`Your ${who}'s name is ${hit}. 🐾 How is ${hit} doing these days?`:`You haven't told me your ${who}'s name yet. What is it? I'd love to know.`; }
+  if(/^(how are you|how r u|how are u|how're you|how is it going|hows it going|how's it going|what'?s up|sup)\b/.test(q)){ mem.awaiting='mood'; return pickFresh([`I'm doing well, thanks for asking, ${first(S.name||'friend')}! My tail's wagging. 🐾 How are you feeling today?`,`Happy to see you! I'm good. How about you, how's your day been?`],mem); }
   const d=detectMood(text); if(d.topic) mem.topic=d.topic;
   const short=q.replace(/[.!?]/g,'').trim();
   // short answers depend on what Milo asked last
@@ -658,6 +670,8 @@ function localReply(text){ const mem=miloMem(); const q=text.toLowerCase().trim(
     return withNudge(out,mem,d,qq); }
   if(!d.mood && d.topic==='love'){ if(!NEGATIVE.includes(mem.mood||'')) mem.moodAt=mem.turns; mem.mood='sad'; mem.awaiting='story'; return pickFresh(['Oh {n}, I\'m so sorry. That really hurts.'],mem).replace('{n}',first(S.name||'friend'))+' '+pickFresh(['However you\'re feeling about it is okay.'],mem)+' '+pickFresh(['How are you holding up?','Do you want to talk about what happened?'],mem); }
   // no clear mood: respond to what Milo was waiting for
+  if((mem.awaiting==='story'||mem.awaiting==='comfort') && !NEGATIVE.includes(mem.mood||'') && !same){ mem.awaiting='open';
+    return pickFresh(['That\'s lovely to hear.','Oh, nice!','I love that.'],mem)+' '+pickFresh(['Tell me more?','What do you two like doing together?','How has your week been otherwise?'],mem); }
   if(mem.awaiting==='story'||same){ mem.awaiting='comfort'; const B=STORY_BY[mem.mood]||{}; const qq=pickFresh(B.q||STORY_Q,mem);
     return withNudge([fill(pickFresh(B.r||STORY_R,mem),d),B.r?'':pickFresh(STORY_V,mem),qq].filter(Boolean).join(' '),mem,d,qq); }
   if(mem.awaiting==='comfort'){ mem.awaiting='open'; const ec=/\b(hurt|hurts|pain|painful)\b/.test(q)?'I know, it really hurts. ':/\b(yes|yeah|true|exactly)\b/.test(q)?'I hear you. ':''; const nd=nudgeFor(mem,d); return nd? ec+pickFresh(LIFT,mem)+nd : ec+pickFresh(COMFORT,mem)+' '+pickFresh(LIFT,mem); }
@@ -682,7 +696,8 @@ function miloContext(){ return `You are Milo, a warm, gentle golden retriever gu
 function miloLog(){ S.miloLog=S.miloLog||[]; return S.miloLog; }
 function miloTurns(){ return miloLog().slice(-12).map(m=>({role:m.me?'user':'assistant',content:m.t})); }
 function deviceId(){ let d; try{ d=localStorage.getItem('socius-device'); if(!d){ d=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)); localStorage.setItem('socius-device',d); } }catch(e){ d=d||'anon'; } return d; }
-let aiCtl=null;
+let aiCtl=null, AI_FAIL='';
+function aiFailCopy(st,c){ c=String(c||''); if(/insufficient_quota|billing/.test(c)) return 'OpenAI account has no credit (add billing at platform.openai.com)'; if(/invalid_api_key|401/.test(c)||st===401) return 'OpenAI key is not valid'; if(st===429||/rate/.test(c)) return 'too many messages, try again in a minute'; if(/model/.test(c)) return 'model not available on this OpenAI account'; if(st===503) return 'OpenAI key not set on the server'; return 'OpenAI error '+(c||st); }
 async function aiAsk(text, onText){
   const mem=miloMem();
   if(CRISIS_RE.test(text)){ mem.turns++; const t=crisisReply(); onText&&onText(t); return t; }
@@ -694,8 +709,9 @@ async function aiAsk(text, onText){
   try{
     if(prov==='server'){
       const r=await fetch('/api/milo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:turns,state:miloState(),device:deviceId()})});
-      if(!r.ok) throw new Error('server'); const j=await r.json(); const out=(j&&j.text)||''; if(!out) throw new Error('empty');
-      onText&&onText(out); return track(out); }
+      if(!r.ok){ let c=''; try{ const ej=await r.json(); c=ej.code||ej.error||''; }catch(e){} AI_FAIL=aiFailCopy(r.status,c); throw new Error('server'); }
+      const j=await r.json(); const out=(j&&j.text)||''; if(!out){ AI_FAIL='OpenAI sent an empty reply'; throw new Error('empty'); }
+      AI_FAIL=''; onText&&onText(out); return track(out); }
     if(prov==='openai'){
       const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getKey()},
         body:JSON.stringify({model:'gpt-4o-mini',temperature:0.7,max_tokens:220,messages:[{role:'system',content:miloContext()},...turns]})});

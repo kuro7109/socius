@@ -37,7 +37,21 @@ const clean = arr => (Array.isArray(arr) ? arr : [])
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'GET') {
-    return res.status(200).json({ ok: true, configured: Boolean(process.env.OPENAI_API_KEY), memory: db.enabled });
+    const out = { ok: true, configured: Boolean(process.env.OPENAI_API_KEY), memory: db.enabled };
+    // /api/milo?test=1 runs a tiny real call so problems (bad key, no credit) are easy to see. Never returns the key.
+    if (req.query && req.query.test && out.configured) {
+      try {
+        const t = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+          body: JSON.stringify({ model: MODEL, max_tokens: 5, messages: [{ role: 'user', content: 'Say hi' }] }),
+        });
+        if (t.ok) out.openai = 'working';
+        else { let c = ''; try { const e = await t.json(); c = (e && e.error && (e.error.code || e.error.type)) || ''; } catch {} out.openai = `error ${t.status}${c ? ' ' + c : ''}`; }
+      } catch { out.openai = 'unreachable'; }
+      if (db.enabled) out.supabase = (await db.ping()) ? 'working' : 'error (check SUPABASE_URL, the service_role key, and that schema.sql was run)';
+    }
+    return res.status(200).json(out);
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
@@ -87,7 +101,11 @@ module.exports = async (req, res) => {
         ],
       }),
     });
-    if (!r.ok) return res.status(502).json({ error: 'upstream_error', status: r.status });
+    if (!r.ok) {
+      let code = '';
+      try { const e = await r.json(); code = (e && e.error && (e.error.code || e.error.type)) || ''; } catch {}
+      return res.status(502).json({ error: 'upstream_error', status: r.status, code });
+    }
     const j = await r.json();
     const text = j?.choices?.[0]?.message?.content?.trim() || '';
     if (!text) return res.status(502).json({ error: 'empty_reply' });
