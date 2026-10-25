@@ -697,7 +697,7 @@ function miloLog(){ S.miloLog=S.miloLog||[]; return S.miloLog; }
 function miloTurns(){ return miloLog().slice(-12).map(m=>({role:m.me?'user':'assistant',content:m.t})); }
 function deviceId(){ let d; try{ d=localStorage.getItem('socius-device'); if(!d){ d=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)); localStorage.setItem('socius-device',d); } }catch(e){ d=d||'anon'; } return d; }
 let aiCtl=null, AI_FAIL='';
-function aiFailCopy(st,c){ c=String(c||''); if(/insufficient_quota|billing/.test(c)) return 'OpenAI account has no credit (add billing at platform.openai.com)'; if(/invalid_api_key|401/.test(c)||st===401) return 'OpenAI key is not valid'; if(st===429||/rate/.test(c)) return 'too many messages, try again in a minute'; if(/model/.test(c)) return 'model not available on this OpenAI account'; if(st===503) return 'OpenAI key not set on the server'; return 'OpenAI error '+(c||st); }
+function aiFailCopy(st,c){ c=String(c||''); if(/insufficient_quota|billing|credit/.test(c)) return 'OpenAI account has no credit (add billing at platform.openai.com)'; if(/invalid_api_key|401/.test(c)||st===401) return 'OpenAI key is not valid'; if(st===429||/rate/.test(c)) return 'too many messages, try again in a minute'; if(/model/.test(c)) return 'model not available on this OpenAI account'; if(st===503) return 'OpenAI key not set on the server'; return 'OpenAI error '+(c||st); }
 async function aiAsk(text, onText){
   const mem=miloMem();
   if(CRISIS_RE.test(text)){ mem.turns++; const t=crisisReply(); onText&&onText(t); return t; }

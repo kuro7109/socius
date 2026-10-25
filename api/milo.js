@@ -49,7 +49,7 @@ module.exports = async (req, res) => {
         if (t.ok) out.openai = 'working';
         else { let c = ''; try { const e = await t.json(); c = (e && e.error && (e.error.code || e.error.type)) || ''; } catch {} out.openai = `error ${t.status}${c ? ' ' + c : ''}`; }
       } catch { out.openai = 'unreachable'; }
-      if (db.enabled) out.supabase = (await db.ping()) ? 'working' : 'error (check SUPABASE_URL, the service_role key, and that schema.sql was run)';
+      if (db.enabled) out.supabase = await db.ping();
     }
     return res.status(200).json(out);
   }
