@@ -21,7 +21,11 @@ socius/
 ├── js/
 │   └── app.js          # App logic: router, landing page, onboarding, play, chats, clans, coach, learn
 ├── api/
-│   └── milo.js         # Vercel function: Milo's OpenAI replies (key stays on the server)
+│   ├── milo.js         # Vercel function: Milo's OpenAI replies (key stays on the server)
+│   ├── history.js      # Milo's memory: load, save, clear (Supabase)
+│   └── _supabase.js    # Server-only Supabase helper
+├── supabase/
+│   └── schema.sql      # One table for Milo's memory, locked with row-level security
 ├── assets/
 │   ├── fonts/          # Fredoka (wordmark), Nunito (interface), Lora (reading text)
 │   ├── milo/           # Milo mascot poses
@@ -59,24 +63,34 @@ Milo lives in **Chats** and always replies, in one of these ways (first availabl
 
 | Mode | When | Key stored where |
 |---|---|---|
-| Socius server (OpenAI) | Deployed on Vercel with `OPENAI_API_KEY` set | Vercel environment variables only |
+| Socius server (OpenAI `gpt-4o-mini`) | Deployed on Vercel with `OPENAI_API_KEY` set | Vercel environment variables only |
 | Your own OpenAI key | A visitor adds one in Milo's **AI settings** | That visitor's browser only |
 | Claude | When the page runs inside claude.ai | Not needed |
-| Offline mode | No AI available | Not needed: warm, built-in replies for loneliness, stress, nerves, missing home and more |
+| Offline mode | No AI available | Not needed: a built-in listening engine |
+
+**How Milo replies.** Every mode follows the same rules:
+
+1. Reply to what the person just said, in the context of the whole chat. Never repeat a line.
+2. Reflect the feeling, validate it, ask one gentle question or offer one tiny comfort. 2 to 4 short sentences.
+3. Match the mood: soft for sad or lonely, calm for anxious, let them vent when angry, celebrate when happy.
+4. Never forceful: no "you should", no lectures, no "look on the bright side".
+5. Listen first. Only after a few messages may Milo offer one old friend who has been through the same thing, as an option. "No" is always fine.
+
+**Memory.** The conversation is kept in the browser and, if Supabase is set up, on the server too, so Milo remembers across visits. Visitors are identified only by a random device id. **New chat** clears it.
 
 **Safety:** messages about suicide, self-harm or danger never go to the AI. Milo answers right away with Tele-MANAS **14416** (free, 24/7 in India), **112**, and the user's safety contact.
 
-### Connect OpenAI on Vercel
+### Set up on Vercel
 
-1. Vercel → your project → **Settings → Environment Variables**.
-2. Add `OPENAI_API_KEY` = your key (Production, Preview). Optional: `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
-3. Redeploy. `GET /api/milo` should return `{"configured": true}`.
+1. **OpenAI:** Vercel → your project → **Settings → Environment Variables** → add `OPENAI_API_KEY`. Optional: `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
+2. **Supabase (memory):** create a project at supabase.com → **SQL Editor** → run `supabase/schema.sql`. Then in Vercel add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Project Settings → API).
+3. Redeploy. `GET /api/milo` should return `{"configured": true, "memory": true}`.
 
 Never commit a real key. `.env` files are git-ignored; see `.env.example`.
 
 ## Tech
 
-Plain HTML, CSS and JavaScript with no framework and no build step, plus one Vercel serverless function (`api/milo.js`) that keeps the OpenAI key on the server. Progress is saved in the browser's `localStorage`.
+Plain HTML, CSS and JavaScript with no framework and no build step, plus Vercel serverless functions in `api/` that keep the OpenAI and Supabase keys on the server. Progress is saved in the browser's `localStorage`.
 
 ## Note
 

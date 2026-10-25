@@ -409,25 +409,25 @@ function chatSeed(){ S.chats=S.chats||{}; if(S.chatsSeeded) return; const now=Da
 function chatPeople(){ const keys=Object.keys(S.chats).sort((a,b)=>((S.chats[b].at(-1)||{}).at||0)-((S.chats[a].at(-1)||{}).at||0));
   return [...new Set(keys.concat(S.following, FRIENDS.slice(0,6).map(f=>f[0])))].filter(n=>n!==S.name); }
 
-function miloPane(narrow){ const tips=MILO_TIPS[ui.prevPage]||MILO_TIPS.home; ui.miloLog=ui.miloLog||[];
+function miloPane(narrow){ const tips=MILO_TIPS[ui.prevPage]||MILO_TIPS.home; const LOG=miloLog();
   return `<section class="cpane milo-pane">
-    <header class="cpane-h">${narrow?'<button class="link" id="cBack">‹ Chats</button>':''}<span class="milo-av">${auri(44,'happy')}</span><div style="flex:1;min-width:0"><b>Milo</b><div class="small muted">Your guide. Points you to real people, never keeps you here.</div></div><button class="btn line sm" id="aiSet">AI settings</button></header>
+    <header class="cpane-h">${narrow?'<button class="link" id="cBack">‹ Chats</button>':''}<span class="milo-av">${auri(44,'happy')}</span><div style="flex:1;min-width:0"><b>Milo</b><div class="small muted">Your guide. Points you to real people, never keeps you here.</div></div>${LOG.length?'<button class="btn line sm" id="miClr" title="Start a fresh conversation">New chat</button>':''}<button class="btn line sm" id="aiSet">AI settings</button></header>
     <div class="cmsgs" id="miMsgs">
       <div class="bub">Hi ${esc(first(S.name))}! Here's what's next for you.</div>
       <div class="mi-tips">${tips.map((t,i)=>`<button class="mi-tip" data-tip="${esc(t[2])}"><span class="mi-n">${i+1}</span><span class="mi-t"><b>${esc(t[0])}</b><small>${esc(t[1])}</small></span><span class="mi-go">GO →</span></button>`).join('')}</div>
-      ${ui.miloLog.map(m=>`<div class="bub ${m.me?'me':''}">${esc(m.t)}</div>`).join('')}
+      ${LOG.map(m=>`<div class="bub ${m.me?'me':''}">${esc(m.t)}</div>`).join('')}
       <div id="miOut" aria-live="polite"></div>
     </div>
     <div class="chips mi-chips">${['Chat with Kabir','Open my report','Go to clans','How am I feeling?'].map(c=>`<button class="chip" data-cmd="${c}">${c}</button>`).join('')}</div>
     <form class="composer" id="miF"><button type="button" class="mic" id="miMic" aria-label="Speak to Milo" aria-pressed="false">${ICON_MIC}</button><input id="miIn" autocomplete="off" placeholder="Ask Milo or say a command" aria-label="Ask Milo"><button type="submit" class="csend" aria-label="Send">${ICON_SEND}</button></form>
     <p class="small muted cnote">${AI_LABEL[aiProvider()]}</p></section>`; }
 function wireMilo(){ const pg=$('#page'), box=$('#miMsgs'); box.scrollTop=box.scrollHeight;
-  const push=(me,t)=>{ ui.miloLog.push({me,t}); ui.miloLog=ui.miloLog.slice(-20); };
+  const push=(me,t)=>{ const L=miloLog(); L.push({me,t,at:Date.now()}); S.miloLog=L.slice(-40); save(); };
   const run=async t=>{ t=(t||'').trim(); if(!t) return; const r=runCommand(t); if(!r) return; push(true,t);
     const out=$('#miOut'); out.insertAdjacentHTML('beforebegin',`<div class="bub me">${esc(t)}</div>`);
     out.innerHTML=`<div class="bub" id="aiB"><span class="typing"><span></span><span></span><span></span></span></div>`; box.scrollTop=1e9;
     try{ const full=await aiAsk(t,txt=>{ const b=$('#aiB'); if(b) b.textContent=splitAction(txt).text||'…'; });
-      const {text,act}=splitAction(full); push(false,text); const b=$('#aiB'); if(b){ b.removeAttribute('id'); b.textContent=text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; if(act){ const btn=document.createElement('button'); btn.className='lgo sm'; btn.style.cssText='margin-top:8px;display:block'; btn.textContent=actLabel(act)+' →'; btn.onclick=()=>{ const a=act.toLowerCase().startsWith('chat:')?'chat:'+act.slice(5).trim():act.toLowerCase(); doTip(a); }; b.appendChild(btn); } } }
+      const {text,act}=splitAction(full); push(false,text); if(!CRISIS_RE.test(t)) memSync(t,full); const b=$('#aiB'); if(b){ b.removeAttribute('id'); b.textContent=text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; if(act){ const btn=document.createElement('button'); btn.className='lgo sm'; btn.style.cssText='margin-top:8px;display:block'; btn.textContent=actLabel(act)+' →'; btn.onclick=()=>{ const a=act.toLowerCase().startsWith('chat:')?'chat:'+act.slice(5).trim():act.toLowerCase(); doTip(a); }; b.appendChild(btn); } } }
     catch(e){ const b=$('#aiB'); if(b){ b.removeAttribute('id'); const lr=(e&&e.code==='bad_key')?{text:aiErrCopy('bad_key')}:splitAction(localReply(t)); b.textContent=lr.text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; push(false,lr.text); } }
     box.scrollTop=1e9; };
   pg.querySelectorAll('[data-tip]').forEach(b=>b.onclick=()=>doTip(b.dataset.tip));
@@ -435,6 +435,7 @@ function wireMilo(){ const pg=$('#page'), box=$('#miMsgs'); box.scrollTop=box.sc
   $('#miF').onsubmit=e=>{ e.preventDefault(); const v=$('#miIn').value; $('#miIn').value=''; run(v); };
   $('#miMic').onclick=()=>listen($('#miMic'),t=>{ $('#miIn').value=t; run(t); });
   $('#aiSet').onclick=openAISettings;
+  const clr=$('#miClr'); if(clr) clr.onclick=()=>modal(`<h2>Start a fresh chat?</h2><p class="muted">Milo will forget this conversation.</p><div class="row"><button class="btn gold" id="y" style="flex:1">Yes, start fresh</button><button class="btn line" id="n">Keep it</button></div>`,(m,c)=>{ $('#n',m).onclick=c; $('#y',m).onclick=()=>{ clearMilo(); c(); pageChats(); }; });
   if(!matchMedia('(max-width:760px)').matches) $('#miIn').focus(); }
 function pageChats(){
   chatSeed(); const q=(ui.chatQ||'').toLowerCase();
@@ -531,57 +532,182 @@ function listen(btn, onText){
 let SAMPLE=null; (async()=>{ try{ if(window.claude&&claude.use) SAMPLE=await claude.use('sample'); }catch(e){ SAMPLE=null; } })();
 const getKey=()=>{ try{ return localStorage.getItem('socius-openai-key')||''; }catch(e){ return ''; } };
 const setKey=k=>{ try{ k?localStorage.setItem('socius-openai-key',k):localStorage.removeItem('socius-openai-key'); }catch(e){} };
-let SERVER_AI=false;
-(async()=>{ try{ if(!/^https?:/.test(location.protocol)) return; const r=await fetch('/api/milo',{method:'GET',headers:{'Accept':'application/json'}}); if(r.ok){ const j=await r.json(); SERVER_AI=!!(j&&j.configured); if(ui.page==='chats'&&ui.chatWith==='__milo') pageChats(); } }catch(e){ SERVER_AI=false; } })();
+let SERVER_AI=false, SERVER_MEM=false;
+(async()=>{ try{ if(!/^https?:/.test(location.protocol)) return; const r=await fetch('/api/milo',{method:'GET',headers:{'Accept':'application/json'}}); if(r.ok){ const j=await r.json(); SERVER_AI=!!(j&&j.configured); SERVER_MEM=!!(j&&j.memory);
+  if(SERVER_MEM && !miloLog().length){ try{ const h=await fetch('/api/history?device='+encodeURIComponent(deviceId())); if(h.ok){ const hj=await h.json(); if(hj&&Array.isArray(hj.messages)&&hj.messages.length){ S.miloLog=hj.messages.map(m=>({me:m.role==='user',t:splitAction(m.content).text})); save(); } } }catch(e){} }
+  if(ui.page==='chats'&&ui.chatWith==='__milo') pageChats(); } }catch(e){ SERVER_AI=false; } })();
+function memSync(user,reply){ if(!SERVER_MEM || aiProvider()==='server') return; try{ fetch('/api/history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device:deviceId(),messages:[{role:'user',content:user},{role:'assistant',content:reply}]})}).catch(()=>{}); }catch(e){} }
+function clearMilo(){ S.miloLog=[]; S.miloMem=null; save(); if(SERVER_MEM){ try{ fetch('/api/history?device='+encodeURIComponent(deviceId()),{method:'DELETE'}).catch(()=>{}); }catch(e){} } }
 function aiProvider(){ return getKey()?'openai':SERVER_AI?'server':SAMPLE?'claude':'local'; }
 const AI_LABEL={openai:'AI: your OpenAI key',server:'AI: Milo (OpenAI)',claude:'AI: Claude',local:'Milo is replying in offline mode'};
-const CRISIS_RE=/\b(suicid\w*|kill (my ?self|me)|end (my|it all|my life)|want to die|wanna die|don'?t want to (live|be here)|no reason to live|self[- ]?harm|hurt(ing)? my ?self|cut(ting)? my ?self|better off dead)\b/i;
-function crisisReply(){ return `I'm really sorry you're carrying this much pain, and I'm glad you told me. You deserve a real person with you right now. Please call Tele-MANAS on 14416 (free, 24/7 in India), or 112 if you're in immediate danger, and reach out to ${S.safety||'someone you trust'} today. I'm a guide, not a counsellor, but you don't have to go through this alone.`; }
-function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-function localReply(text){ const q=text.toLowerCase(), me=first(S.name||'friend');
-  if(CRISIS_RE.test(q)) return crisisReply();
-  const f=(FRIENDS.find(x=>!has('reached',x[0]))||FRIENDS[0]); const fn=first(f[0]);
-  const I=[
-    [/\b(hi|hey|hello|hii+|yo|namaste)\b/, ()=>[`Hey ${me}! I'm glad you stopped by. How has your week honestly been?`,`Hi ${me}! Wagging my tail over here. What's on your mind today?`]],
-    [/\b(lonely|alone|isolated|no friends|no one|nobody|left out)\b/, ()=>[`That sounds really heavy, and I'm glad you said it out loud. Feeling lonely doesn't mean anything is wrong with you; it means you need people, like all of us do. ${fn} has been there too. Want to send one small hello?\nACTION: chat:${f[0]}`,`I hear you. Lonely weeks are hard, especially when everyone seems busy. One tiny step could help: a short message to someone who gets it, like ${fn}.\nACTION: chat:${f[0]}`]],
-    [/\b(sad|down|low|upset|crying|cried|heartbroken|hurt|empty|blue)\b/, ()=>[`I'm sorry it's been a low day. Your feelings make sense, and you don't have to fix them alone. Is there one person you'd feel okay telling, even just "rough day today"?\nACTION: chat:Riya Menon`,`That sounds hard, ${me}. Sometimes naming it to one friend makes it a little lighter. Riya went through a rough patch too; she'd understand.\nACTION: chat:Riya Menon`]],
-    [/\b(anxious|anxiety|nervous|scared|afraid|awkward|overthink\w*|shy)\b/, ()=>[`That nervous feeling is so normal, especially before reaching out. People are usually gladder to hear from you than you expect. Want a simple opener for ${fn}?\nACTION: chat:${f[0]}`,`Totally understandable. Start tiny: one line, no pressure to keep it going. Most people really appreciate being remembered.\nACTION: chat:${f[0]}`]],
-    [/\b(stress\w*|work|deadline|exam|review|boss|pressure|burn ?out|overwhelm\w*)\b/, ()=>[`That's a lot to carry. Stress shrinks when you share it with someone who's been there. Riya got through a rough first review; a 5-minute chat might help.\nACTION: chat:Riya Menon`,`Sounds like a heavy load, ${me}. Take one slow breath. Then maybe tell one friend how the week's going; you don't have to hold it all yourself.\nACTION: chat:Riya Menon`]],
-    [/\b(miss|missing|homesick|far away|family|mom|mum|dad|parents|hometown)\b/, ()=>[`Missing them means they really matter to you. A quick voice note tonight could make both your days. Who comes to mind first?`,`That ache is real, ${me}. Distance is hard. Maybe send a photo or a "thinking of you" to someone from home today?`]],
-    [/\b(bored|nothing to do|weekend|free time|evening)\b/, ()=>[`Perfect time for a small adventure! Your clan has a meetup coming up. Showing up once is how most friendships start.\nACTION: meetup`,`How about turning the quiet evening into a hello? Even a 10-minute call with ${fn} counts.\nACTION: chat:${f[0]}`]],
-    [/\b(tired|exhausted|can'?t sleep|insomnia|late night|sleepy)\b/, ()=>[`It's okay to rest, ${me}. If it's late, maybe put the phone down for tonight and message ${fn} in the morning. Want to log how you're feeling first?\nACTION: feel`,`Being tired makes everything feel heavier. Be gentle with yourself tonight. Tomorrow, one small hello is enough.\nACTION: feel`]],
-    [/\b(happy|great|good news|excited|promoted|passed|won|proud)\b/, ()=>[`Yay, I love that! Good news grows when you share it. Who would be happiest to hear it?\nACTION: chat:${f[0]}`,`That's wonderful, ${me}! Tell someone today; joy feels even better with company.\nACTION: chat:${f[0]}`]],
-    [/\b(ignored|no reply|didn'?t reply|left on read|rejected|ghosted)\b/, ()=>[`Ouch, that stings. Often people are just busy, not uninterested. Give it a day, and meanwhile say hi to someone else who's been there.\nACTION: chat:${f[0]}`,`That doesn't say anything about your worth. Silence usually means busy. Want to try someone new this week?\nACTION: go:clans`]],
-    [/\b(you('re| are) my (only )?friend|only (talk|talking) to you|love you milo|just you)\b/, ()=>[`Aw, that means a lot, and I'm always here. But I'm a dog with one job: getting you back to your people. Let's find one human to share this with.\nACTION: chat:${f[0]}`]],
-    [/\b(thank|thanks|thx|ty)\b/, ()=>[`Anytime, ${me}. Proud of you for showing up today. 🐾`,`Always here for you! Now go say hi to someone. 🐾`]],
-    [/\b(help|what can you do|how does this work|how do i)\b/, ()=>[`I can suggest who to reach out to, give you a first line, and take you anywhere in Socius. Try "chat with Kabir", "open my report" or just tell me how you feel.`]]];
-  for(const [re,fnc] of I){ if(re.test(q)) return pick(fnc()); }
-  return pick([`Thanks for telling me, ${me}. What's been the hardest part of this week? And is there one person who'd be glad to hear from you?`,`I'm listening. It sounds like a lot is going on. Would it help to share a small piece of it with someone you trust, like ${fn}?\nACTION: chat:${f[0]}`]); }
-function miloState(){ const n=nextTask(); return `User first name: ${first(S.name)}; level ${S.level}; XP ${S.xp}; today's energy ${S.todayMin}/${S.goal} min; clan ${MY_CLAN}; safety contact ${S.safety}; current page ${ui.prevPage||ui.page}; next task: ${n?n.t[1]:'all levels done'}; old friends who've been there: ${FRIENDS.slice(0,5).map(f=>f[0]+' ('+f[1]+')').join('; ')}; upcoming: clan meetup 1st Dec 8-10 AM, Thursday book club 7 pm.`; }
-function miloContext(){ const n=nextTask(); return `You are Milo, the friendly golden retriever guide inside Socius, a game that helps young adults in Bengaluru reconnect with real people instead of an AI. User: ${S.name}, level ${S.level}, ${S.xp} XP, daily goal ${S.todayMin}/${S.goal} min, clan ${MY_CLAN}. Current page: ${ui.page}. Next task: ${n?n.t[1]:'all levels done'}. Old friends who have been there: ${FRIENDS.slice(0,5).map(f=>f[0]+' ('+f[1]+')').join('; ')}. Upcoming: clan annual meetup 1st Dec 8-10 AM, Thursday book club 7 pm.
-Rules: reply in at most 3 short, warm sentences. First acknowledge the feeling in plain, kind words (never preachy), then offer one gentle question or one small step toward a real person. Always nudge toward a real person, never toward talking more to you. Never write messages on the user's behalf to send; offer ideas only. If the user seems in crisis, tell them to call Tele-MANAS 14416 (free, 24/7 in India) or 112, and to contact their safety contact (${S.safety}).
-If one app action would help, end with exactly one line: ACTION: chat:<full name> | go:home|play|clans|progress|blogs|profile | feel | meetup | invite`; }
-let aiTurns=[], aiCtl=null;
+/* ===== Milo conversation engine =====
+   Rules: reflect -> validate -> one gentle question -> small lift. Listen first; only offer a person after a few
+   messages, always optional. Remember the conversation. Never forceful. Safety always first. */
+const CRISIS_RE=/\b(suicid\w*|kill (my ?self|me)|end (it all|my life)|want to die|wanna die|don'?t want to (live|be here|exist)|no reason to live|self[- ]?harm|hurt(ing)? my ?self|cut(ting)? my ?self|better off dead|can'?t go on)\b/i;
+function crisisReply(){ return `I'm really sorry you're carrying this much pain, and I'm so glad you told me. You deserve a real person with you right now. Please call Tele-MANAS on 14416 (free, 24/7 in India), or 112 if you're in immediate danger, and reach out to ${S.safety||'someone you trust'}. I'm right here too, but please don't go through this alone.`; }
+function miloMem(){ S.miloMem=S.miloMem||{turns:0,awaiting:null,offer:null,nudgedAt:-99,used:[],topic:null,mood:null}; return S.miloMem; }
+const NEG_WORDS=/\b(not|no|never|isn'?t|aren'?t|wasn'?t|don'?t|doesn'?t|didn'?t|no longer|hardly|barely)\s+(\w+\s+){0,2}$/i;
+const MOOD_RULES=[
+  ['better',/\b(feel(ing)? (a (bit|little|lot) )?better|not (feeling )?(sad|lonely|down|low|anxious|stressed) any ?more|(i'?m|i am|feeling) (okay|ok|fine|good) now|cheered up|that helped|feel lighter)\b/i,false],
+  ['sad',/\b(not (feeling )?(good|great|okay|ok|well|fine|alright)|sad|down|low|upset|unhappy|depress(ed|ing)?|crying|cried|tears|heartbroken|miserable|hurt(ing)?|empty|blue|gloomy|awful|terrible|horrible|broken|hopeless|bad day|rough day|broke up|break ?up|dumped|got fired|lost my|failed|rejected|ghosted|left on read|shouted at|yelled at|insulted)\b/i,true],
+  ['lonely',/\b(lonely|alone|isolated|no friends|(no ?one|nobody)( \w+)? (to talk|cares|gets|understands)|left out|by myself|no one around)\b/i,true],
+  ['anxious',/\b(anxious|anxiety|nervous|scared|afraid|worried|worry|panic\w*|overthink\w*|racing|awkward|shy|uneasy|on edge)\b/i,true],
+  ['angry',/\b(angry|mad|furious|annoyed|irritated|frustrat\w+|pissed|fed up|hate (this|it|everything))\b/i,true],
+  ['stressed',/\b(stress\w*|overwhelm\w*|pressure|burn(ed|t)? ?out|too much (work|to do)|deadline\w*|swamped|exhausting week)\b/i,true],
+  ['tired',/\b(tired|exhausted|drained|can'?t sleep|insomnia|sleepy|no energy|worn out)\b/i,true],
+  ['missing',/\b(miss(ing)?|homesick)\b/i,true],
+  ['bored',/\b(bored|boring|nothing to do)\b/i,true],
+  ['happy',/\b(happy|great|amazing|awesome|good news|excited|promoted|passed|got (the|a) job|won|proud|good day|so good|wonderful|yay)\b/i,true],
+  ['grateful',/\b(thank(s| you)?|thx|ty|grateful|appreciate)\b/i,false],
+];
+const TOPICS=[
+  ['work',/\b(work|job|office|boss|manager|review|colleague|team|deadline|meeting)\b/i,' at work'],
+  ['study',/\b(exam|college|studies|study|assignment|marks|grades|placement|semester|class)\b/i,' with your studies'],
+  ['love',/\b(breakup|broke up|ex\b|girlfriend|boyfriend|partner|relationship|crush)\b/i,''],
+  ['family',/\b(family|mom|mum|mother|dad|father|parents|sister|brother|home(town)?)\b/i,' with family'],
+  ['friends',/\b(friend|friends|group chat|nobody replies|no one replies|ignored|left on read|ghosted)\b/i,' with friends'],
+  ['alone',/\b(pg|live alone|living alone|by myself|my room)\b/i,' on your own'],
+  ['move',/\b(new city|moved|bengaluru|bangalore|relocat\w+|pg\b|flat|room)\b/i,' in a new city'],
+  ['health',/\b(sick|ill|fever|health|pain|hospital)\b/i,' with your health'],
+  ['money',/\b(money|rent|salary|loan|broke)\b/i,' with money'],
+];
+function detectMood(t){ const q=t.toLowerCase(); let best=null;
+  for(const [m,re,checkNeg] of MOOD_RULES){ const mt=q.match(re); if(!mt) continue;
+    if(checkNeg && !/^not /.test(mt[0]) && NEG_WORDS.test(q.slice(0,mt.index))){ if(['sad','lonely','anxious','stressed','angry'].includes(m)){ best=best||{mood:'better'}; } continue; }
+    best={mood:m}; break; }
+  const intense=/\b(very|so|really|extremely|super|terribly|completely|totally)\b|!{2,}/i.test(q)||/[A-Z]{4,}/.test(t);
+  const top=TOPICS.find(([k,re])=>re.test(q));
+  return {mood:best?best.mood:null,intense,topic:top?top[0]:null,tp:top?top[2]:''}; }
+const NEGATIVE=['sad','lonely','anxious','angry','stressed','tired','missing'];
+const FRIEND_FOR={work:'Riya Menon',study:'Rohit Nair',love:'Pooja Reddy',family:'Tanvi Joshi',move:'Kabir Sethi',alone:'Farhan Ali',friends:'Zoya Khan',lonely:'Farhan Ali'};
+const L={
+  sad:{r:['I\'m really sorry you\'re feeling this way{t}.','That sounds like a heavy day{t}.','Oh {n}, that sounds really hard{t}.'],ri:['That sounds really painful{t}, {n}.','I\'m so sorry, that sounds like a lot to hold{t}.'],
+    v:['It\'s okay to feel this way; you don\'t have to put on a brave face here.','Sad days are allowed. Nothing is wrong with you for feeling this.','Whatever brought this on, your feelings make sense.'],
+    q:['Do you want to tell me what happened?','What\'s been weighing on you the most?','Has it been building up for a while, or did something happen today?'],aw:'story'},
+  lonely:{r:['Feeling lonely is really hard{t}.','That kind of lonely feeling can sit really heavy.','I\'m sorry you\'re feeling so alone{t}.'],
+    v:['It doesn\'t mean anything is wrong with you; it just means you need connection, like everyone does.','So many people feel this, even when it looks like they don\'t.'],
+    q:['When do you feel it the most: evenings, weekends, or all the time?','Has it felt like this for a while?'],aw:'story'},
+  anxious:{r:['That sounds stressful, and I can tell it\'s sitting on your mind.','Feeling nervous like that is really uncomfortable.'],
+    v:['Your mind is trying to protect you; it\'s a very normal feeling.','It makes sense to feel uneasy about something that matters to you.'],
+    q:['What\'s the part you\'re most worried about?','What\'s the worst-case thought that keeps coming up?'],aw:'story'},
+  angry:{r:['That sounds really frustrating{t}.','Ugh, I can hear how annoyed you are.'],
+    v:['You\'re allowed to be angry about that.','Anyone would be upset in that situation.'],
+    q:['Do you want to vent about it? I\'m listening, no judgement.','What happened?'],aw:'story'},
+  stressed:{r:['That sounds like a lot on your plate{t}.','No wonder you feel stretched thin{t}.'],
+    v:['Feeling overwhelmed doesn\'t mean you\'re failing; it means you\'re carrying a lot.','Anyone would feel the pressure with that much going on.'],
+    q:['What\'s the one thing stressing you most right now?','What\'s taking up most of your energy?'],aw:'story'},
+  tired:{r:['You sound really worn out.','That kind of tired goes all the way down, doesn\'t it?'],
+    v:['Being tired makes everything feel heavier than it is.','Your body might be asking for a little care.'],
+    q:['Have you had a chance to rest at all today?','Has sleep been hard lately?'],aw:'comfort'},
+  missing:{r:['Missing them that much shows how much they mean to you.','That ache of missing someone is so real.'],
+    v:['Distance is hard, and it\'s okay to feel it.','That kind of love doesn\'t fade just because they\'re far.'],
+    q:['Who are you missing the most right now?','What do you miss most about them?'],aw:'story'},
+  bored:{r:['Ah, one of those slow, empty-feeling evenings.','Boredom can sneak up on you, can\'t it?'],v:[''],
+    q:['Want a couple of ideas, or would you rather just chat for a bit?','What usually makes an evening feel good for you?'],aw:'comfort'},
+  happy:{r:['Yay, I love hearing that, {n}! 😊','That\'s wonderful, {n}!','Oh, that makes my tail wag!'],v:[''],
+    q:['What made it so good?','Tell me everything, what happened?'],aw:'share'},
+  better:{r:['That\'s so good to hear, {n}. I\'m really glad it eased up.','Aww, I\'m so happy you\'re feeling a bit better.'],v:[''],
+    q:['What do you think helped?','Is there anything that made the difference today?'],aw:'helped'},
+  grateful:{r:['Anytime, {n}. I\'m always here when you need me. 🐾','You\'re so welcome. I\'m really glad we talked.'],v:[''],q:[''],aw:null},
+};
+const STORY_R=['Thank you for telling me. That\'s a lot to deal with.','No wonder you\'ve been feeling this way.','That sounds really tough, {n}.'];
+const STORY_V=['Anyone in your place would feel it too.','You\'re handling more than people probably see.','It makes complete sense that it\'s affecting you.'];
+const STORY_Q=['How are you holding up right now?','What would feel even a little comforting right now?','How is it sitting with you now that you\'ve said it out loud?'];
+const STORY_BY={missing:{r:['That sounds so special. No wonder you miss it this much.','Those little things are what we miss the most, aren\'t they?'],q:['When did you last get to talk to them?','Would hearing their voice tonight feel nice?']},
+  happy:{r:['That\'s honestly so lovely.'],q:['How are you going to celebrate?']},
+  angry:{r:['Ugh, that would annoy anyone.','Honestly, that\'s not fair to you.'],q:['How are you feeling about it now that you\'ve let it out?','Has this happened before?']}};
+const ADVICE={sad:'There\'s no rush to fix it. For tonight, maybe something small and kind for yourself: food you like, a shower, an early night. Feelings this big usually soften a little with time and people around you.',
+  lonely:'Maybe start really small, like one message to someone you used to be close to, or one place you could go where people share an interest. Only when you feel ready.',
+  anxious:'One thing that often helps: write down the worry, then one tiny step you can control. And a few slow breaths, in for 4 and out for 6.',
+  stressed:'Maybe pick just the one thing that matters most for tomorrow and let the rest wait. Short breaks count too.',
+  angry:'It might help to let it cool a little before deciding anything. When you\'re ready, saying calmly how it made you feel usually lands better than the anger itself.',
+  missing:'A short voice note or a video call tonight can feel really close. Even a photo saying "thinking of you" counts.',
+  tired:'Maybe try putting the phone away a bit earlier tonight, with dim lights and something calm. Rest is not lazy.'};
+const COMFORT=['If you want, something small might help a bit: a warm drink, a few slow breaths, or a song you love. No pressure at all.','Maybe be a little gentle with yourself tonight; a short walk or an early night can make tomorrow feel lighter.','Sometimes a tiny thing helps, like stepping outside for two minutes or texting a funny meme to someone. Only if it feels right.'];
+const LIFT=['I\'m really glad you told me.','Thank you for trusting me with this.','I\'m right here with you.','You\'re not alone in this.'];
+function pickFresh(arr,mem){ const opts=arr.filter(x=>x&&!mem.used.includes(x)); const p=(opts.length?opts:arr.filter(Boolean))[Math.floor(Math.random()*(opts.length||arr.filter(Boolean).length||1))]||''; if(p){ mem.used.push(p); mem.used=mem.used.slice(-40); } return p; }
+function fill(s,d){ return s.replace('{n}',first(S.name||'friend')).replace('{t}',d.tp||''); }
+function nudgeFor(mem,d){ if(!(NEGATIVE.includes(mem.mood||'') && mem.moodAt!=null && mem.turns-mem.moodAt>=2 && mem.turns-mem.nudgedAt>=5)) return '';
+  const name=FRIEND_FOR[d.topic||mem.topic]||FRIEND_FOR[mem.mood]; const f=name&&FRIENDS.find(x=>x[0]===name); if(!f) return '';
+  mem.nudgedAt=mem.turns; mem.offer='chat:'+f[0]; mem.offerAt=mem.turns;
+  return `\n\nOnly if you feel like it: ${first(f[0])} ${f[1].charAt(0).toLowerCase()+f[1].slice(1)}, so they might really get what this feels like. No rush at all.\nACTION: chat:${f[0]}`; }
+function localReply(text){ const mem=miloMem(); const q=text.toLowerCase().trim(); mem.turns++; if(mem.offer && mem.turns-(mem.offerAt||0)>1) mem.offer=null;
+  if(CRISIS_RE.test(q)){ mem.awaiting=null; return crisisReply(); }
+  const d=detectMood(text); if(d.topic) mem.topic=d.topic;
+  const short=q.replace(/[.!?]/g,'').trim();
+  // short answers depend on what Milo asked last
+  if(/^(yes|yeah|yep|sure|ok(ay)?|okk|haan|ha|please|why not)$/.test(short) && mem.offer && mem.turns-(mem.offerAt||0)<=1){ const a=mem.offer; mem.offer=null; return `Lovely. I'll be right here if you want to come back and talk after. 🐾\nACTION: ${a}`; }
+  if(/^(yes|yeah|yep|sure|ok(ay)?|okk|haan|ha|hmm yes)$/.test(short)) return pickFresh(['Okay. Take your time, I\'m listening.','I\'m here. Tell me more whenever you\'re ready.'],mem);
+  if(/\b(what (do|should|can) i do|any (advice|tips|ideas)|how (do|can) i (cope|deal|handle|stop|feel better)|help me|what now|ideas)\b/.test(q) && (mem.mood||d.mood)){ const m=d.mood||mem.mood; mem.awaiting='comfort';
+    return (ADVICE[m]||ADVICE.sad)+' '+pickFresh(['Does any of that feel doable?','Would any of that feel okay for you?'],mem); }
+  if(/^(no|nah|nope|not now|maybe later|later|nahi)$/.test(short)){ mem.offer=null; return pickFresh(['That\'s completely okay. We can just talk, or sit quietly for a bit. I\'m here.','No pressure at all. I\'m happy to just listen.'],mem); }
+  if(/^(i ?don'?t know|idk|not sure|dunno|no idea|hmm+|meh)$/.test(short)) return pickFresh(['That\'s okay, you don\'t need the right words. Even "it\'s just a lot" is enough.','That\'s alright. Sometimes feelings don\'t come with labels. Want to tell me a little about your day instead?'],mem);
+  if(/^(hi|hey|hello|hii+|heyy+|yo|namaste|good (morning|evening|night))\b/.test(q) && !d.mood){
+    const lm=S.lastMood; mem.awaiting='mood';
+    if(lm&&['sad','worried','angry'].includes(lm)) return `Hey ${first(S.name)}, it's good to see you. Earlier you said you were feeling ${({sad:'sad',worried:'worried',angry:'upset'})[lm]}. How are you doing now?`;
+    return pickFresh([`Hey ${first(S.name)}! It's really good to see you. How are you feeling today, honestly?`,`Hi ${first(S.name)}! 🐾 How's your day been treating you?`],mem); }
+  if(/\b(you('re| are) my (only |best )?friend|only (talk|talking) to you|love you milo|just you|you understand me)\b/.test(q)) return `I'm really glad I can be here for you, and I'll always listen. I'd also love for you to have people who can laugh with you and hug you back. Would you like to tell me about someone you used to feel close to?`;
+  if(/\b(what can you do|how does this work|help me use|who are you)\b/.test(q)) return `I'm Milo, your guide in Socius. I'm here to listen, help you feel a bit lighter, and when you're ready, help you reconnect with people who get it. You can also ask me to "open my report" or "go to clans".`;
+  if(mem.awaiting==='helped' && !NEGATIVE.includes(d.mood)){ mem.awaiting=null; return pickFresh(['That\'s really worth remembering for the next hard day. I\'m proud of you for getting through it.','I love that. You got yourself through this, and that counts.'],mem)+' '+pickFresh(['How would you like the rest of your day to go?','Anything nice planned for later?'],mem); }
+  const same=d.mood && d.mood===mem.mood && NEGATIVE.includes(d.mood) && mem.awaiting!=='mood';
+  if(d.mood && L[d.mood] && !same){ const T=L[d.mood]; if(NEGATIVE.includes(d.mood)&&!NEGATIVE.includes(mem.mood||'')) mem.moodAt=mem.turns; if(!NEGATIVE.includes(d.mood)) mem.moodAt=null; mem.mood=d.mood; mem.awaiting=T.aw;
+    const r=fill(pickFresh(d.intense&&T.ri?T.ri:T.r,mem),d), v=pickFresh(T.v,mem), qq=pickFresh(T.q,mem);
+    let out=[r,v,qq].filter(Boolean).join(' ');
+    if(d.mood==='anxious'&&d.intense) out+=' If it helps right now, try one slow breath with me: in for 4, out for 6.';
+    if(d.mood==='happy'&&mem.turns>=3&&!mem.sharedNudge){ mem.sharedNudge=true; out+=`\n\nGood news grows when it's shared. If you feel like it, tell someone who'd love to hear it.\nACTION: chat:${FRIENDS[0][0]}`; return out; }
+    return withNudge(out,mem,d,qq); }
+  if(!d.mood && d.topic==='love'){ if(!NEGATIVE.includes(mem.mood||'')) mem.moodAt=mem.turns; mem.mood='sad'; mem.awaiting='story'; return pickFresh(['Oh {n}, I\'m so sorry. That really hurts.'],mem).replace('{n}',first(S.name||'friend'))+' '+pickFresh(['However you\'re feeling about it is okay.'],mem)+' '+pickFresh(['How are you holding up?','Do you want to talk about what happened?'],mem); }
+  // no clear mood: respond to what Milo was waiting for
+  if(mem.awaiting==='story'||same){ mem.awaiting='comfort'; const B=STORY_BY[mem.mood]||{}; const qq=pickFresh(B.q||STORY_Q,mem);
+    return withNudge([fill(pickFresh(B.r||STORY_R,mem),d),B.r?'':pickFresh(STORY_V,mem),qq].filter(Boolean).join(' '),mem,d,qq); }
+  if(mem.awaiting==='comfort'){ mem.awaiting='open'; const ec=/\b(hurt|hurts|pain|painful)\b/.test(q)?'I know, it really hurts. ':/\b(yes|yeah|true|exactly)\b/.test(q)?'I hear you. ':''; const nd=nudgeFor(mem,d); return nd? ec+pickFresh(LIFT,mem)+nd : ec+pickFresh(COMFORT,mem)+' '+pickFresh(LIFT,mem); }
+  if(mem.awaiting==='share'){ mem.awaiting=null; return pickFresh(['That\'s honestly so lovely. You deserve days like this.','I love that for you! Moments like these are worth remembering.'],mem)+' '+pickFresh(['What would make tomorrow good too?','Who else would be happy to hear about it?'],mem); }
+  if(mem.awaiting==='mood'){ mem.awaiting='story'; return pickFresh(['Thanks for telling me. How has the week been feeling overall?','Got it. Is anything on your mind today?'],mem); }
+  mem.awaiting='story';
+  return [pickFresh(['Thanks for sharing that with me, {n}.','I\'m listening.','I hear you.'],mem).replace('{n}',first(S.name)),pickFresh(['How are you feeling about it?','Tell me a bit more, what\'s been on your mind?','How has that been for you?'],mem)].join(' '); }
+function withNudge(out,mem,d,qq){ const nd=nudgeFor(mem,d); if(!nd) return out; return (qq&&out.endsWith(qq)?out.slice(0,-qq.length).trim():out)+nd; }
+
+const MILO_RULES=`How you reply (follow every time):
+1. Read the whole conversation first. Reply to what they just said, in the context of what came before. Never ignore a detail they shared, and never repeat a line you already used.
+2. Shape: (a) reflect the feeling in their own words, (b) validate it ("that makes sense"), (c) ask ONE gentle open question OR offer one tiny comfort, (d) a warm, light touch. 2 to 4 short sentences, simple English, like a kind friend texting. Max one emoji.
+3. Match their mood. Sad or lonely: soft and slow, no jokes, no silver linings. Anxious: calm, steady, maybe one slow breath. Angry: let them vent, take their side on the feeling. Happy: celebrate with them and ask for the story.
+4. Never be forceful. No "you should", "you must", "just do X", no lectures, no toxic positivity ("look on the bright side", "others have it worse"). Suggestions are optional: "only if it feels right", "no pressure".
+5. Listen first. Do NOT suggest people, apps, clans or actions in your first 2 replies of a conversation about a hard feeling. After 3 or more messages, if it fits naturally, you may gently offer ONE person from their old friends who has been through the same thing, as an option, never a push. Don't offer again if they said no or you offered recently.
+6. If they say "yes" to something you offered, help with that. If they say "no", accept it warmly and keep listening. If they say "I don't know", reassure them that's okay.
+7. Never pretend to be human, never diagnose, never write messages for them to send. Encourage real people over talking to you, gently.
+8. Safety: if they mention self-harm, suicide or danger, respond with care and give Tele-MANAS 14416 (free, 24/7 India), 112, and their safety contact.
+9. Only if one app action clearly helps (usually after an offer), end with exactly one line: ACTION: chat:<full name> | go:home|play|clans|progress|blogs | feel | meetup`;
+function miloState(){ const n=nextTask(), mem=miloMem(); return `User first name: ${first(S.name)}; mood check-in today: ${S.lastMood||'not logged'}; level ${S.level}; clan ${MY_CLAN}; safety contact ${S.safety}; next task: ${n?n.t[1]:'all levels done'}; old friends who've been there: ${FRIENDS.map(f=>f[0]+' ('+f[1]+')').join('; ')}; upcoming: clan meetup 1st Dec 8-10 AM, Thursday book club 7 pm. Conversation meta: user messages so far ${mem.turns}; ${mem.turns-mem.nudgedAt<5?'you offered a person recently, do not offer again':'no recent offer'}.`; }
+function miloContext(){ return `You are Milo, a warm, gentle golden retriever guide inside Socius, an app that helps young adults in Bengaluru feel less alone and reconnect with real people.\n${MILO_RULES}\n\nAbout the user: ${miloState()}`; }
+function miloLog(){ S.miloLog=S.miloLog||[]; return S.miloLog; }
+function miloTurns(){ return miloLog().slice(-12).map(m=>({role:m.me?'user':'assistant',content:m.t})); }
+function deviceId(){ let d; try{ d=localStorage.getItem('socius-device'); if(!d){ d=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)); localStorage.setItem('socius-device',d); } }catch(e){ d=d||'anon'; } return d; }
+let aiCtl=null;
 async function aiAsk(text, onText){
-  if(CRISIS_RE.test(text)){ const t=crisisReply(); onText&&onText(t); return t; }
-  aiTurns.push({role:'user',content:text}); aiTurns=aiTurns.slice(-8);
+  const mem=miloMem();
+  if(CRISIS_RE.test(text)){ mem.turns++; const t=crisisReply(); onText&&onText(t); return t; }
   const prov=aiProvider();
-  if(prov==='local'){ aiTurns.pop(); await new Promise(r=>setTimeout(r,600+Math.random()*500)); const t=localReply(text); onText&&onText(t); return t; }
-  if(prov==='server'){
-    try{ const r=await fetch('/api/milo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:aiTurns,state:miloState()})});
+  const turns=miloTurns(); const lt=turns[turns.length-1]; if(!lt||lt.role!=='user'||lt.content!==text) turns.push({role:'user',content:text});
+  const local=async()=>{ await new Promise(r=>setTimeout(r,500+Math.random()*500)); const t=localReply(text); onText&&onText(t); return t; };
+  const track=out=>{ mem.turns++; if(/ACTION:\s*chat:/i.test(out)) mem.nudgedAt=mem.turns; const d=detectMood(text); if(d.mood) mem.mood=d.mood; if(d.topic) mem.topic=d.topic; save(); return out; };
+  if(prov==='local') return local();
+  try{
+    if(prov==='server'){
+      const r=await fetch('/api/milo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:turns,state:miloState(),device:deviceId()})});
       if(!r.ok) throw new Error('server'); const j=await r.json(); const out=(j&&j.text)||''; if(!out) throw new Error('empty');
-      onText&&onText(out); aiTurns.push({role:'assistant',content:out}); return out; }
-    catch(e){ aiTurns.pop(); const t=localReply(text); onText&&onText(t); return t; } }
-  if(prov==='openai'){
-    const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getKey()},
-      body:JSON.stringify({model:'gpt-4o-mini',temperature:0.6,messages:[{role:'system',content:miloContext()},...aiTurns]})});
-    if(!r.ok){ aiTurns.pop(); if(r.status===401) throw {code:'bad_key'}; const t=localReply(text); onText&&onText(t); return t; }
-    const j=await r.json(); const out=(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||''; onText&&onText(out); aiTurns.push({role:'assistant',content:out}); return out; }
-  if(prov==='claude'){
-    aiCtl=new AbortController();
-    const res=await SAMPLE([{role:'user',content:miloContext()},...aiTurns],{cache:false,modelTier:'quick',signal:aiCtl.signal,onText:({text})=>onText&&onText(text)});
-    aiTurns.push({role:'assistant',content:res.text}); return res.text; }
-  aiTurns.pop(); const t=localReply(text); onText&&onText(t); return t; }
+      onText&&onText(out); return track(out); }
+    if(prov==='openai'){
+      const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getKey()},
+        body:JSON.stringify({model:'gpt-4o-mini',temperature:0.7,max_tokens:220,messages:[{role:'system',content:miloContext()},...turns]})});
+      if(!r.ok){ if(r.status===401) throw {code:'bad_key'}; throw new Error('openai'); }
+      const j=await r.json(); const out=(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||''; if(!out) throw new Error('empty'); onText&&onText(out); return track(out); }
+    if(prov==='claude'){
+      aiCtl=new AbortController();
+      const msgs=[{role:'user',content:miloContext()+'\n\n(Conversation follows. Reply only as Milo.)'},{role:'assistant',content:'Understood.'},...turns];
+      const res=await SAMPLE(msgs,{cache:false,modelTier:'quick',signal:aiCtl.signal,onText:({text})=>onText&&onText(text)});
+      return track(res.text); }
+  }catch(e){ if(e&&e.code==='bad_key') throw e; }
+  return local(); }
 function splitAction(t){ const m=t.match(/\n?\s*ACTION:\s*([^\n]+)\s*$/i); return m?{text:t.slice(0,m.index).trim(),act:m[1].trim()}:{text:t.trim(),act:null}; }
 function actLabel(a){ if(a.startsWith('chat:')) return 'Chat with '+first(a.slice(5)); if(a.startsWith('go:')) return 'Open '+({blogs:'Learn',progress:'my report'}[a.slice(3)]||a.slice(3)); return {feel:'Check in',meetup:'See the meetup',invite:'Invite a friend'}[a]||'Go'; }
 function aiErrCopy(c){ return {bad_key:'That OpenAI key was refused. Check it in AI settings.',openai_error:'OpenAI did not answer. Try again in a moment.',not_granted:'AI is switched off for this page. You can still use the quick buttons.',rate_limited:'Milo needs a short break. Try again in a minute.',none:'AI is not connected here. Add your OpenAI key in AI settings, or use the quick buttons.'}[c]||'Milo could not answer this time. Try again.'; }
@@ -593,7 +719,7 @@ function openAISettings(){ const k=getKey();
     <p class="small" style="text-align:left"><b>Now using:</b> ${{openai:'Your own OpenAI key',server:'Socius server (OpenAI key set by the site owner)',claude:'Claude (via claude.ai)',local:'Offline mode: Milo\'s own warm replies'}[aiProvider()]}</p>
     <div class="row" style="width:100%"><button class="btn line" id="rm" style="flex:1">${k?'Remove key':'Cancel'}</button><button class="btn gold" id="sv" style="flex:1">Save</button></div>`,(m,c)=>{
       $('#rm',m).onclick=()=>{ if(k){ setKey(''); toast('Key removed from this browser.'); } c(); if(ui.page==='chats') pageChats(); };
-      $('#sv',m).onclick=()=>{ const v=$('#okey',m).value.trim(); if(v && !v.startsWith('•')){ if(!/^sk-/.test(v)){ toast('That does not look like an OpenAI key (it starts with sk-).'); return; } setKey(v); aiTurns=[]; toast('Key saved in this browser.'); } c(); if(ui.page==='chats') pageChats(); };
+      $('#sv',m).onclick=()=>{ const v=$('#okey',m).value.trim(); if(v && !v.startsWith('•')){ if(!/^sk-/.test(v)){ toast('That does not look like an OpenAI key (it starts with sk-).'); return; } setKey(v); toast('Key saved in this browser.'); } c(); if(ui.page==='chats') pageChats(); };
     },'mc'); }
 function openDock(tab='milo', who){ if(tab==='chats') openChat(who||null); else openMilo(); }
 function closeDock(){ const d=$('#dock'); if(d){ d.hidden=true; } document.body.classList.remove('dockopen'); }
@@ -618,6 +744,7 @@ function renderDock(){
     $('#miF').onsubmit=e=>{ e.preventDefault(); const v=$('#miIn').value; $('#miIn').value=''; run(v); };
     $('#miMic').onclick=()=>listen($('#miMic'),t=>{ $('#miIn').value=t; run(t); });
     $('#aiSet').onclick=openAISettings;
+  const clr=$('#miClr'); if(clr) clr.onclick=()=>modal(`<h2>Start a fresh chat?</h2><p class="muted">Milo will forget this conversation.</p><div class="row"><button class="btn gold" id="y" style="flex:1">Yes, start fresh</button><button class="btn line" id="n">Keep it</button></div>`,(m,c)=>{ $('#n',m).onclick=c; $('#y',m).onclick=()=>{ clearMilo(); c(); pageChats(); }; });
     return; }
   chatSeed(); const cur=ui.dockWith;
   if(!cur){ const q=(ui.dockQ||'').toLowerCase(); const people=chatPeople().filter(n=>n.toLowerCase().includes(q));
