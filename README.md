@@ -20,6 +20,8 @@ socius/
 │   └── styles.css      # All styles (design tokens, layout, components, responsive rules)
 ├── js/
 │   └── app.js          # App logic: router, landing page, onboarding, play, chats, clans, coach, learn
+├── api/
+│   └── milo.js         # Vercel function: Milo's OpenAI replies (key stays on the server)
 ├── assets/
 │   ├── fonts/          # Fredoka (wordmark), Nunito (interface), Lora (reading text)
 │   ├── milo/           # Milo mascot poses
@@ -51,9 +53,30 @@ socius/
 - **Energy:** the minutes a day you choose to give your people.
 - Nobody is ever rated, and both people say yes before anyone messages.
 
+## Milo, the AI guide
+
+Milo lives in **Chats** and always replies, in one of these ways (first available wins):
+
+| Mode | When | Key stored where |
+|---|---|---|
+| Socius server (OpenAI) | Deployed on Vercel with `OPENAI_API_KEY` set | Vercel environment variables only |
+| Your own OpenAI key | A visitor adds one in Milo's **AI settings** | That visitor's browser only |
+| Claude | When the page runs inside claude.ai | Not needed |
+| Offline mode | No AI available | Not needed: warm, built-in replies for loneliness, stress, nerves, missing home and more |
+
+**Safety:** messages about suicide, self-harm or danger never go to the AI. Milo answers right away with Tele-MANAS **14416** (free, 24/7 in India), **112**, and the user's safety contact.
+
+### Connect OpenAI on Vercel
+
+1. Vercel → your project → **Settings → Environment Variables**.
+2. Add `OPENAI_API_KEY` = your key (Production, Preview). Optional: `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
+3. Redeploy. `GET /api/milo` should return `{"configured": true}`.
+
+Never commit a real key. `.env` files are git-ignored; see `.env.example`.
+
 ## Tech
 
-Plain HTML, CSS and JavaScript with no framework and no build. Progress is saved in the browser's `localStorage`. Milo's AI replies can use your own OpenAI key, entered in the app's AI settings and stored only in your browser, never in this code. Without a key, Milo still works with quick buttons and commands.
+Plain HTML, CSS and JavaScript with no framework and no build step, plus one Vercel serverless function (`api/milo.js`) that keeps the OpenAI key on the server. Progress is saved in the browser's `localStorage`.
 
 ## Note
 

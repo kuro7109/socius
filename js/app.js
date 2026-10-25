@@ -420,16 +420,15 @@ function miloPane(narrow){ const tips=MILO_TIPS[ui.prevPage]||MILO_TIPS.home; ui
     </div>
     <div class="chips mi-chips">${['Chat with Kabir','Open my report','Go to clans','How am I feeling?'].map(c=>`<button class="chip" data-cmd="${c}">${c}</button>`).join('')}</div>
     <form class="composer" id="miF"><button type="button" class="mic" id="miMic" aria-label="Speak to Milo" aria-pressed="false">${ICON_MIC}</button><input id="miIn" autocomplete="off" placeholder="Ask Milo or say a command" aria-label="Ask Milo"><button type="submit" class="csend" aria-label="Send">${ICON_SEND}</button></form>
-    <p class="small muted cnote">${{openai:'AI: your OpenAI key',claude:'AI: Claude',none:'AI is off: quick buttons and commands still work'}[aiProvider()]}</p></section>`; }
+    <p class="small muted cnote">${AI_LABEL[aiProvider()]}</p></section>`; }
 function wireMilo(){ const pg=$('#page'), box=$('#miMsgs'); box.scrollTop=box.scrollHeight;
   const push=(me,t)=>{ ui.miloLog.push({me,t}); ui.miloLog=ui.miloLog.slice(-20); };
   const run=async t=>{ t=(t||'').trim(); if(!t) return; const r=runCommand(t); if(!r) return; push(true,t);
     const out=$('#miOut'); out.insertAdjacentHTML('beforebegin',`<div class="bub me">${esc(t)}</div>`);
-    if(aiProvider()==='none'){ push(false,r); out.insertAdjacentHTML('beforebegin',`<div class="bub">${esc(r)}</div>`); box.scrollTop=1e9; return; }
     out.innerHTML=`<div class="bub" id="aiB"><span class="typing"><span></span><span></span><span></span></span></div>`; box.scrollTop=1e9;
     try{ const full=await aiAsk(t,txt=>{ const b=$('#aiB'); if(b) b.textContent=splitAction(txt).text||'…'; });
       const {text,act}=splitAction(full); push(false,text); const b=$('#aiB'); if(b){ b.removeAttribute('id'); b.textContent=text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; if(act){ const btn=document.createElement('button'); btn.className='lgo sm'; btn.style.cssText='margin-top:8px;display:block'; btn.textContent=actLabel(act)+' →'; btn.onclick=()=>{ const a=act.toLowerCase().startsWith('chat:')?'chat:'+act.slice(5).trim():act.toLowerCase(); doTip(a); }; b.appendChild(btn); } } }
-    catch(e){ const b=$('#aiB'); if(b){ b.removeAttribute('id'); b.textContent=aiErrCopy(e&&e.code); } }
+    catch(e){ const b=$('#aiB'); if(b){ b.removeAttribute('id'); const lr=(e&&e.code==='bad_key')?{text:aiErrCopy('bad_key')}:splitAction(localReply(t)); b.textContent=lr.text; out.insertAdjacentElement('beforebegin',b); out.innerHTML=''; push(false,lr.text); } }
     box.scrollTop=1e9; };
   pg.querySelectorAll('[data-tip]').forEach(b=>b.onclick=()=>doTip(b.dataset.tip));
   pg.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>run(b.dataset.cmd));
@@ -508,14 +507,14 @@ function doTip(a){ if(a.startsWith('chat:')) return openDock('chats',a.slice(5))
   if(a==='play'){ go('play'); setTimeout(()=>{ try{ startChat(); }catch(e){} },60); return; } if(a==='invite'){ go('profile'); setTimeout(()=>$('#invF')&&$('#invF').click(),60); return; } if(a==='find'){ go('profile'); setTimeout(()=>$('#findF')&&$('#findF').click(),60); return; } if(a.startsWith('go:')) go(a.slice(3)); }
 function runCommand(t){ const q=t.toLowerCase().trim(); if(!q) return '';
   const ppl=chatPeople(); const who=ppl.find(n=>q.includes(first(n).toLowerCase()));
-  if(who && /(chat|message|talk|hi|hello|text|open)/.test(q)){ openDock('chats',who); return ''; }
-  const pages={home:'home',play:'play',game:'play',clan:'clans',progress:'progress',report:'progress',learn:'blogs',video:'blogs',profile:'profile',coach:'coach',therap:'coach',plus:'coach'};
-  for(const k in pages){ if(q.includes(k)){ closeDock(); go(pages[k]); const nm={home:'Home',play:'Play',clans:'Clans',progress:'your report',blogs:'Learn',profile:'your profile',coach:'Coach'}[pages[k]]; toast(`Opened ${nm}`); return ''; } }
-  if(/feel|mood|check in/.test(q)){ closeDock(); openFeel(); return ''; }
-  if(/meetup|event|rsvp/.test(q)){ doTip('meetup'); return ''; }
-  if(/chat|message/.test(q)){ openDock('chats'); return ''; }
-  if(/invite/.test(q)){ doTip('invite'); return ''; }
-  return `I didn't catch that. Try "chat with Kabir", "open my report" or "go to clans".`; }
+  if(who && /\b(chat with|message|text|talk to|say hi to|open (my )?chat)\b/.test(q)){ openChat(who); return ''; }
+  const nav=/^(please\s+)?(go to|open|take me to|show me|show)\b/.test(q);
+  const pages={home:'home',play:'play',game:'play',quest:'play',clan:'clans',progress:'progress',report:'progress',learn:'blogs',video:'blogs',book:'blogs',profile:'profile',coach:'coach',plus:'coach',chats:'chats'};
+  if(nav){ for(const k in pages){ if(q.includes(k)){ const p=pages[k]; if(p==='chats'){ openChat(null); return ''; } go(p); const nm={home:'Home',play:'Play',clans:'Clans',progress:'your report',blogs:'Learn',profile:'your profile',coach:'Coach'}[p]; toast(`Opened ${nm}`); return ''; } } }
+  if(/^(check in|log (my )?mood|how am i feeling\??)$/.test(q)){ openFeel(); return ''; }
+  if(nav && /meetup|event|rsvp/.test(q)){ doTip('meetup'); return ''; }
+  if(nav && /invite/.test(q)){ doTip('invite'); return ''; }
+  return 'ai'; }
 let rec=null;
 function listen(btn, onText){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -532,33 +531,66 @@ function listen(btn, onText){
 let SAMPLE=null; (async()=>{ try{ if(window.claude&&claude.use) SAMPLE=await claude.use('sample'); }catch(e){ SAMPLE=null; } })();
 const getKey=()=>{ try{ return localStorage.getItem('socius-openai-key')||''; }catch(e){ return ''; } };
 const setKey=k=>{ try{ k?localStorage.setItem('socius-openai-key',k):localStorage.removeItem('socius-openai-key'); }catch(e){} };
-function aiProvider(){ return getKey()?'openai':SAMPLE?'claude':'none'; }
+let SERVER_AI=false;
+(async()=>{ try{ if(!/^https?:/.test(location.protocol)) return; const r=await fetch('/api/milo',{method:'GET',headers:{'Accept':'application/json'}}); if(r.ok){ const j=await r.json(); SERVER_AI=!!(j&&j.configured); if(ui.page==='chats'&&ui.chatWith==='__milo') pageChats(); } }catch(e){ SERVER_AI=false; } })();
+function aiProvider(){ return getKey()?'openai':SERVER_AI?'server':SAMPLE?'claude':'local'; }
+const AI_LABEL={openai:'AI: your OpenAI key',server:'AI: Milo (OpenAI)',claude:'AI: Claude',local:'Milo is replying in offline mode'};
+const CRISIS_RE=/\b(suicid\w*|kill (my ?self|me)|end (my|it all|my life)|want to die|wanna die|don'?t want to (live|be here)|no reason to live|self[- ]?harm|hurt(ing)? my ?self|cut(ting)? my ?self|better off dead)\b/i;
+function crisisReply(){ return `I'm really sorry you're carrying this much pain, and I'm glad you told me. You deserve a real person with you right now. Please call Tele-MANAS on 14416 (free, 24/7 in India), or 112 if you're in immediate danger, and reach out to ${S.safety||'someone you trust'} today. I'm a guide, not a counsellor, but you don't have to go through this alone.`; }
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function localReply(text){ const q=text.toLowerCase(), me=first(S.name||'friend');
+  if(CRISIS_RE.test(q)) return crisisReply();
+  const f=(FRIENDS.find(x=>!has('reached',x[0]))||FRIENDS[0]); const fn=first(f[0]);
+  const I=[
+    [/\b(hi|hey|hello|hii+|yo|namaste)\b/, ()=>[`Hey ${me}! I'm glad you stopped by. How has your week honestly been?`,`Hi ${me}! Wagging my tail over here. What's on your mind today?`]],
+    [/\b(lonely|alone|isolated|no friends|no one|nobody|left out)\b/, ()=>[`That sounds really heavy, and I'm glad you said it out loud. Feeling lonely doesn't mean anything is wrong with you; it means you need people, like all of us do. ${fn} has been there too. Want to send one small hello?\nACTION: chat:${f[0]}`,`I hear you. Lonely weeks are hard, especially when everyone seems busy. One tiny step could help: a short message to someone who gets it, like ${fn}.\nACTION: chat:${f[0]}`]],
+    [/\b(sad|down|low|upset|crying|cried|heartbroken|hurt|empty|blue)\b/, ()=>[`I'm sorry it's been a low day. Your feelings make sense, and you don't have to fix them alone. Is there one person you'd feel okay telling, even just "rough day today"?\nACTION: chat:Riya Menon`,`That sounds hard, ${me}. Sometimes naming it to one friend makes it a little lighter. Riya went through a rough patch too; she'd understand.\nACTION: chat:Riya Menon`]],
+    [/\b(anxious|anxiety|nervous|scared|afraid|awkward|overthink\w*|shy)\b/, ()=>[`That nervous feeling is so normal, especially before reaching out. People are usually gladder to hear from you than you expect. Want a simple opener for ${fn}?\nACTION: chat:${f[0]}`,`Totally understandable. Start tiny: one line, no pressure to keep it going. Most people really appreciate being remembered.\nACTION: chat:${f[0]}`]],
+    [/\b(stress\w*|work|deadline|exam|review|boss|pressure|burn ?out|overwhelm\w*)\b/, ()=>[`That's a lot to carry. Stress shrinks when you share it with someone who's been there. Riya got through a rough first review; a 5-minute chat might help.\nACTION: chat:Riya Menon`,`Sounds like a heavy load, ${me}. Take one slow breath. Then maybe tell one friend how the week's going; you don't have to hold it all yourself.\nACTION: chat:Riya Menon`]],
+    [/\b(miss|missing|homesick|far away|family|mom|mum|dad|parents|hometown)\b/, ()=>[`Missing them means they really matter to you. A quick voice note tonight could make both your days. Who comes to mind first?`,`That ache is real, ${me}. Distance is hard. Maybe send a photo or a "thinking of you" to someone from home today?`]],
+    [/\b(bored|nothing to do|weekend|free time|evening)\b/, ()=>[`Perfect time for a small adventure! Your clan has a meetup coming up. Showing up once is how most friendships start.\nACTION: meetup`,`How about turning the quiet evening into a hello? Even a 10-minute call with ${fn} counts.\nACTION: chat:${f[0]}`]],
+    [/\b(tired|exhausted|can'?t sleep|insomnia|late night|sleepy)\b/, ()=>[`It's okay to rest, ${me}. If it's late, maybe put the phone down for tonight and message ${fn} in the morning. Want to log how you're feeling first?\nACTION: feel`,`Being tired makes everything feel heavier. Be gentle with yourself tonight. Tomorrow, one small hello is enough.\nACTION: feel`]],
+    [/\b(happy|great|good news|excited|promoted|passed|won|proud)\b/, ()=>[`Yay, I love that! Good news grows when you share it. Who would be happiest to hear it?\nACTION: chat:${f[0]}`,`That's wonderful, ${me}! Tell someone today; joy feels even better with company.\nACTION: chat:${f[0]}`]],
+    [/\b(ignored|no reply|didn'?t reply|left on read|rejected|ghosted)\b/, ()=>[`Ouch, that stings. Often people are just busy, not uninterested. Give it a day, and meanwhile say hi to someone else who's been there.\nACTION: chat:${f[0]}`,`That doesn't say anything about your worth. Silence usually means busy. Want to try someone new this week?\nACTION: go:clans`]],
+    [/\b(you('re| are) my (only )?friend|only (talk|talking) to you|love you milo|just you)\b/, ()=>[`Aw, that means a lot, and I'm always here. But I'm a dog with one job: getting you back to your people. Let's find one human to share this with.\nACTION: chat:${f[0]}`]],
+    [/\b(thank|thanks|thx|ty)\b/, ()=>[`Anytime, ${me}. Proud of you for showing up today. 🐾`,`Always here for you! Now go say hi to someone. 🐾`]],
+    [/\b(help|what can you do|how does this work|how do i)\b/, ()=>[`I can suggest who to reach out to, give you a first line, and take you anywhere in Socius. Try "chat with Kabir", "open my report" or just tell me how you feel.`]]];
+  for(const [re,fnc] of I){ if(re.test(q)) return pick(fnc()); }
+  return pick([`Thanks for telling me, ${me}. What's been the hardest part of this week? And is there one person who'd be glad to hear from you?`,`I'm listening. It sounds like a lot is going on. Would it help to share a small piece of it with someone you trust, like ${fn}?\nACTION: chat:${f[0]}`]); }
+function miloState(){ const n=nextTask(); return `User first name: ${first(S.name)}; level ${S.level}; XP ${S.xp}; today's energy ${S.todayMin}/${S.goal} min; clan ${MY_CLAN}; safety contact ${S.safety}; current page ${ui.prevPage||ui.page}; next task: ${n?n.t[1]:'all levels done'}; old friends who've been there: ${FRIENDS.slice(0,5).map(f=>f[0]+' ('+f[1]+')').join('; ')}; upcoming: clan meetup 1st Dec 8-10 AM, Thursday book club 7 pm.`; }
 function miloContext(){ const n=nextTask(); return `You are Milo, the friendly golden retriever guide inside Socius, a game that helps young adults in Bengaluru reconnect with real people instead of an AI. User: ${S.name}, level ${S.level}, ${S.xp} XP, daily goal ${S.todayMin}/${S.goal} min, clan ${MY_CLAN}. Current page: ${ui.page}. Next task: ${n?n.t[1]:'all levels done'}. Old friends who have been there: ${FRIENDS.slice(0,5).map(f=>f[0]+' ('+f[1]+')').join('; ')}. Upcoming: clan annual meetup 1st Dec 8-10 AM, Thursday book club 7 pm.
-Rules: reply in at most 3 short, warm sentences. Always nudge toward a real person, never toward talking more to you. Never write messages on the user's behalf to send; offer ideas only. If the user seems in crisis, tell them to contact their safety contact (${S.safety}) or local emergency services now.
+Rules: reply in at most 3 short, warm sentences. First acknowledge the feeling in plain, kind words (never preachy), then offer one gentle question or one small step toward a real person. Always nudge toward a real person, never toward talking more to you. Never write messages on the user's behalf to send; offer ideas only. If the user seems in crisis, tell them to call Tele-MANAS 14416 (free, 24/7 in India) or 112, and to contact their safety contact (${S.safety}).
 If one app action would help, end with exactly one line: ACTION: chat:<full name> | go:home|play|clans|progress|blogs|profile | feel | meetup | invite`; }
 let aiTurns=[], aiCtl=null;
 async function aiAsk(text, onText){
+  if(CRISIS_RE.test(text)){ const t=crisisReply(); onText&&onText(t); return t; }
   aiTurns.push({role:'user',content:text}); aiTurns=aiTurns.slice(-8);
   const prov=aiProvider();
+  if(prov==='local'){ aiTurns.pop(); await new Promise(r=>setTimeout(r,600+Math.random()*500)); const t=localReply(text); onText&&onText(t); return t; }
+  if(prov==='server'){
+    try{ const r=await fetch('/api/milo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:aiTurns,state:miloState()})});
+      if(!r.ok) throw new Error('server'); const j=await r.json(); const out=(j&&j.text)||''; if(!out) throw new Error('empty');
+      onText&&onText(out); aiTurns.push({role:'assistant',content:out}); return out; }
+    catch(e){ aiTurns.pop(); const t=localReply(text); onText&&onText(t); return t; } }
   if(prov==='openai'){
     const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getKey()},
       body:JSON.stringify({model:'gpt-4o-mini',temperature:0.6,messages:[{role:'system',content:miloContext()},...aiTurns]})});
-    if(!r.ok){ aiTurns.pop(); throw {code:r.status===401?'bad_key':'openai_error'}; }
+    if(!r.ok){ aiTurns.pop(); if(r.status===401) throw {code:'bad_key'}; const t=localReply(text); onText&&onText(t); return t; }
     const j=await r.json(); const out=(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||''; onText&&onText(out); aiTurns.push({role:'assistant',content:out}); return out; }
   if(prov==='claude'){
     aiCtl=new AbortController();
     const res=await SAMPLE([{role:'user',content:miloContext()},...aiTurns],{cache:false,modelTier:'quick',signal:aiCtl.signal,onText:({text})=>onText&&onText(text)});
     aiTurns.push({role:'assistant',content:res.text}); return res.text; }
-  aiTurns.pop(); throw {code:'none'}; }
+  aiTurns.pop(); const t=localReply(text); onText&&onText(t); return t; }
 function splitAction(t){ const m=t.match(/\n?\s*ACTION:\s*([^\n]+)\s*$/i); return m?{text:t.slice(0,m.index).trim(),act:m[1].trim()}:{text:t.trim(),act:null}; }
 function actLabel(a){ if(a.startsWith('chat:')) return 'Chat with '+first(a.slice(5)); if(a.startsWith('go:')) return 'Open '+({blogs:'Learn',progress:'my report'}[a.slice(3)]||a.slice(3)); return {feel:'Check in',meetup:'See the meetup',invite:'Invite a friend'}[a]||'Go'; }
 function aiErrCopy(c){ return {bad_key:'That OpenAI key was refused. Check it in AI settings.',openai_error:'OpenAI did not answer. Try again in a moment.',not_granted:'AI is switched off for this page. You can still use the quick buttons.',rate_limited:'Milo needs a short break. Try again in a minute.',none:'AI is not connected here. Add your OpenAI key in AI settings, or use the quick buttons.'}[c]||'Milo could not answer this time. Try again.'; }
 function openAISettings(){ const k=getKey();
   modal(`${auri(100,'curious','pop')}<h2>Milo's AI</h2>
-    <p class="muted small">Inside claude.ai, Milo answers with Claude (you'll be asked once). In the downloaded file, you can use your own OpenAI key instead.</p>
+    <p class="muted small">On the live site, Milo answers with OpenAI through the Socius server, so you don't need a key. Inside claude.ai he uses Claude. You can also add your own OpenAI key, and with no AI at all Milo still replies warmly in offline mode.</p>
     <div class="field" style="width:100%;text-align:left"><label for="okey" class="small" style="font-weight:700">OpenAI API key</label><input id="okey" type="password" autocomplete="off" placeholder="sk-..." value="${k?'••••••••••••':''}"></div>
-    <p class="small muted" style="text-align:left">Saved only in this browser, never in the file. Don't use it on a shared computer. claude.ai blocks outside servers, so the key works in the downloaded file only.</p>
-    <p class="small" style="text-align:left"><b>Now using:</b> ${{openai:'Your OpenAI key',claude:'Claude (via claude.ai)',none:'No AI (quick buttons only)'}[aiProvider()]}</p>
+    <p class="small muted" style="text-align:left">Optional. Saved only in this browser, never in the code. Don't use it on a shared computer.</p>
+    <p class="small" style="text-align:left"><b>Now using:</b> ${{openai:'Your own OpenAI key',server:'Socius server (OpenAI key set by the site owner)',claude:'Claude (via claude.ai)',local:'Offline mode: Milo\'s own warm replies'}[aiProvider()]}</p>
     <div class="row" style="width:100%"><button class="btn line" id="rm" style="flex:1">${k?'Remove key':'Cancel'}</button><button class="btn gold" id="sv" style="flex:1">Save</button></div>`,(m,c)=>{
       $('#rm',m).onclick=()=>{ if(k){ setKey(''); toast('Key removed from this browser.'); } c(); if(ui.page==='chats') pageChats(); };
       $('#sv',m).onclick=()=>{ const v=$('#okey',m).value.trim(); if(v && !v.startsWith('•')){ if(!/^sk-/.test(v)){ toast('That does not look like an OpenAI key (it starts with sk-).'); return; } setKey(v); aiTurns=[]; toast('Key saved in this browser.'); } c(); if(ui.page==='chats') pageChats(); };
@@ -574,7 +606,7 @@ function renderDock(){
       <div class="mi-tips">${tips.map((t,i)=>`<button class="mi-tip" data-tip="${esc(t[2])}"><span class="mi-n">${i+1}</span><span class="mi-t"><b>${esc(t[0])}</b><small>${esc(t[1])}</small></span><span class="mi-go">GO →</span></button>`).join('')}</div>
       <div class="mi-out" id="miOut" aria-live="polite"></div>
       <div class="chips mi-chips">${['Chat with Kabir','Open my report','Go to clans','How am I feeling?'].map(c=>`<button class="chip" data-cmd="${c}">${c}</button>`).join('')}</div>
-      <div class="ai-row"><span class="small muted">${{openai:'AI: your OpenAI key',claude:'AI: Claude',none:'AI: off'}[aiProvider()]}</span><button class="link" id="aiSet">AI settings</button></div>
+      <div class="ai-row"><span class="small muted">${AI_LABEL[aiProvider()]}</span><button class="link" id="aiSet">AI settings</button></div>
       <form class="dk-comp" id="miF"><button type="button" class="mic" id="miMic" aria-label="Speak to Milo" aria-pressed="false">${ICON_MIC}</button><input id="miIn" placeholder="Ask Milo or say a command" aria-label="Ask Milo" autocomplete="off"><button class="csend" aria-label="Send">${ICON_SEND}</button></form>`;
     const run=async t=>{ const r=runCommand(t); if(!r) return; const out=$('#miOut'); if(aiProvider()==='none'){ out.innerHTML=`<div class="bub">${esc(r)}</div>`; return; }
       out.innerHTML=`<div class="bub me">${esc(t)}</div><div class="bub" id="aiB"><span class="typing"><span></span><span></span><span></span></span></div>`;
